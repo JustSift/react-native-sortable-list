@@ -112,9 +112,9 @@ export default class SortableList extends Component {
       });
 
       const isLessOrEqual = nextData.length <= data.length;
-      
+
       this.setState({
-        animated: false,
+        animated: true,
         data: nextData,
         containerLayout: isLessOrEqual ? containerLayout : null,
         rowsLayouts: isLessOrEqual ? rowsLayouts : null,
@@ -587,7 +587,13 @@ export default class SortableList extends Component {
       activeRowIndex: null,
       releasedRowKey: activeRowKey,
       scrollEnabled: this.props.scrollEnabled,
-    }));
+    }), () => {
+      if (this.props.onChangeOrder) {
+        setTimeout( () => {
+          this.props.onChangeOrder(this.state.order);
+        }, 500);
+      }
+    });
 
     if (this.props.onReleaseRow) {
       this.props.onReleaseRow(rowKey);
