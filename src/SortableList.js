@@ -98,7 +98,7 @@ export default class SortableList extends Component {
   }
 
   componentWillReceiveProps(nextProps) {
-    const {data, order} = this.state;
+    const { containerLayout, data, order, rowsLayouts} = this.state;
     let {data: nextData, order: nextOrder} = nextProps;
 
     if (data && nextData && !shallowEqual(data, nextData)) {
@@ -110,11 +110,15 @@ export default class SortableList extends Component {
           this._resolveRowLayout[key] = resolve;
         });
       });
+
+      const isLessOrEqual = nextData.length <= data.length;
+
       this.setState({
-        animated: false,
+        animated: true,
         data: nextData,
-        containerLayout: null,
-        rowsLayouts: null,
+        containerLayout: isLessOrEqual ? containerLayout : null,
+        rowsLayouts: isLessOrEqual ? rowsLayouts : null,
+        prevRowsLayouts: rowsLayouts,
         order: nextOrder
       });
 
@@ -186,7 +190,7 @@ export default class SortableList extends Component {
   render() {
     let {contentContainerStyle, innerContainerStyle, horizontal, style, showsVerticalScrollIndicator, showsHorizontalScrollIndicator} = this.props;
     const {animated, contentHeight, contentWidth, scrollEnabled} = this.state;
-    const containerStyle = StyleSheet.flatten([style, {opacity: Number(animated)}])
+    const containerStyle = StyleSheet.flatten([style])
     innerContainerStyle = [
       styles.rowsContainer,
       horizontal ? {width: contentWidth} : {height: contentHeight},
@@ -224,7 +228,7 @@ export default class SortableList extends Component {
 
   _renderRows() {
     const {horizontal, rowActivationTime, sortingEnabled, renderRow} = this.props;
-    const {animated, order, data, activeRowKey, releasedRowKey, rowsLayouts} = this.state;
+    const {animated, order, data, activeRowKey, releasedRowKey, rowsLayouts, prevRowsLayouts} = this.state;
 
 
     let nextX = 0;
@@ -234,7 +238,10 @@ export default class SortableList extends Component {
       const style = {[ZINDEX]: 0};
       const location = {x: 0, y: 0};
 
-      if (rowsLayouts) {
+      if (prevRowsLayouts) {
+        location.y = nextY;
+        nextY += prevRowsLayouts[key] ? prevRowsLayouts[key].height : 0;
+      } else if (rowsLayouts) {
         if (horizontal) {
           location.x = nextX;
           nextX += rowsLayouts[key] ? rowsLayouts[key].width : 0;
@@ -378,10 +385,6 @@ export default class SortableList extends Component {
       this.setState({
         order: nextOrder,
         activeRowIndex: rowUnderActiveIndex,
-      }, () => {
-        if (this.props.onChangeOrder) {
-          this.props.onChangeOrder(nextOrder);
-        }
       });
     }
   }
@@ -588,7 +591,13 @@ export default class SortableList extends Component {
       activeRowIndex: null,
       releasedRowKey: activeRowKey,
       scrollEnabled: this.props.scrollEnabled,
-    }));
+    }), () => {
+      if (this.props.onChangeOrder) {
+        setTimeout( () => {
+          this.props.onChangeOrder(this.state.order);
+        }, 500);
+      }
+    });
 
     if (this.props.onReleaseRow) {
       this.props.onReleaseRow(rowKey);
