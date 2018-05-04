@@ -98,7 +98,7 @@ export default class SortableList extends Component {
   }
 
   componentWillReceiveProps(nextProps) {
-    const {containerLayout, data, order, rowsLayouts} = this.state;
+    const {data, order} = this.state;
     let {data: nextData, order: nextOrder} = nextProps;
 
     if (data && nextData && !shallowEqual(data, nextData)) {
@@ -116,8 +116,9 @@ export default class SortableList extends Component {
       this.setState({
         animated: true,
         data: nextData,
-        containerLayout: isLessOrEqual ? containerLayout : null,
-        rowsLayouts: isLessOrEqual ? rowsLayouts : null,
+        containerLayout: isLessOrEqual ? this.state.containerLayout : null,
+        rowsLayouts: isLessOrEqual ? this.state.rowsLayouts : null,
+        prevRowsLayouts: rowsLayouts,
         order: nextOrder
       });
 
@@ -227,7 +228,7 @@ export default class SortableList extends Component {
 
   _renderRows() {
     const {horizontal, rowActivationTime, sortingEnabled, renderRow} = this.props;
-    const {animated, order, data, activeRowKey, releasedRowKey, rowsLayouts} = this.state;
+    const {animated, order, data, activeRowKey, releasedRowKey, rowsLayouts, prevRowsLayouts} = this.state;
 
 
     let nextX = 0;
@@ -237,7 +238,10 @@ export default class SortableList extends Component {
       const style = {[ZINDEX]: 0};
       const location = {x: 0, y: 0};
 
-      if (rowsLayouts) {
+    if (prevRowsLayouts) {
+        location.y = nextY;
+        nextY += prevRowsLayouts[key] ? prevRowsLayouts[key].height : 0;
+      } else if (rowsLayouts) {
         if (horizontal) {
           location.x = nextX;
           nextX += rowsLayouts[key] ? rowsLayouts[key].width : 0;
