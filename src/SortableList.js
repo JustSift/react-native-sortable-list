@@ -98,7 +98,7 @@ export default class SortableList extends Component {
   }
 
   componentWillReceiveProps(nextProps) {
-    const {data, order} = this.state;
+    const { containerLayout, data, order, rowsLayouts} = this.state;
     let {data: nextData, order: nextOrder} = nextProps;
 
     if (data && nextData && !shallowEqual(data, nextData)) {
@@ -116,8 +116,8 @@ export default class SortableList extends Component {
       this.setState({
         animated: true,
         data: nextData,
-        containerLayout: isLessOrEqual ? this.state.containerLayout : null,
-        rowsLayouts: isLessOrEqual ? this.state.rowsLayouts : null,
+        containerLayout: isLessOrEqual ? containerLayout : null,
+        rowsLayouts: isLessOrEqual ? rowsLayouts : null,
         prevRowsLayouts: rowsLayouts,
         order: nextOrder
       });
@@ -238,7 +238,7 @@ export default class SortableList extends Component {
       const style = {[ZINDEX]: 0};
       const location = {x: 0, y: 0};
 
-    if (prevRowsLayouts) {
+      if (prevRowsLayouts) {
         location.y = nextY;
         nextY += prevRowsLayouts[key] ? prevRowsLayouts[key].height : 0;
       } else if (rowsLayouts) {
