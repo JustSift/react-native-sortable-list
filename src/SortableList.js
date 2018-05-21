@@ -258,9 +258,11 @@ export default class SortableList extends Component {
         style[ZINDEX] = 100;
       }
 
+      const makeKeyForIndex = this.props.makeKeyForIndex(key) || uniqueRowKey(key);
+
       return (
         <Row
-          key={uniqueRowKey(key)}
+          key={makeKeyForIndex}
           ref={this._onRefRow.bind(this, key)}
           horizontal={horizontal}
           activationTime={rowActivationTime}
