@@ -100,19 +100,27 @@ export default class SortableList extends Component {
   componentWillReceiveProps(nextProps) {
     const { containerLayout, data, order, rowsLayouts} = this.state;
     let {data: nextData, order: nextOrder} = nextProps;
-
+  
     if (data && nextData && !shallowEqual(data, nextData)) {
-      nextOrder = nextOrder || Object.keys(nextData)
-      uniqueRowKey.id++;
-      this._rowsLayouts = {};
-      nextOrder.forEach((key) => {
-        this._rowsLayouts[key] = new Promise((resolve) => {
-          this._resolveRowLayout[key] = resolve;
-        });
-      });
-
       const isLessOrEqual = nextData.length <= data.length;
+      
+      nextOrder = nextOrder || Object.keys(nextData);
+      uniqueRowKey.id++;
+      
+      if (!isLessOrEqual) {
+        nextOrder = [nextOrder.length - 1];
+      }
 
+      console.log(nextOrder)
+      // if (this.state.prevRowsLayouts) {
+        this._rowsLayouts = {};
+        nextOrder.forEach((key) => {
+          this._rowsLayouts[key] = new Promise((resolve) => {
+            this._resolveRowLayout[key] = resolve;
+          });
+        });
+      // }
+     
       this.setState({
         animated: true,
         data: nextData,
@@ -132,6 +140,7 @@ export default class SortableList extends Component {
     const {data: prevData} = prevState;
 
     if (data && prevData && !shallowEqual(data, prevData)) {
+      console.log("-------------- COMPONENT DID UPDATE------------------")
       this._onUpdateLayouts();
     }
   }
@@ -230,18 +239,26 @@ export default class SortableList extends Component {
     const {horizontal, rowActivationTime, sortingEnabled, renderRow} = this.props;
     const {animated, order, data, activeRowKey, releasedRowKey, rowsLayouts, prevRowsLayouts} = this.state;
 
-
     let nextX = 0;
     let nextY = 0;
-
+  
     return order.map((key, index) => {
       const style = {[ZINDEX]: 0};
       const location = {x: 0, y: 0};
-
+  
+      const keyForIndex = this.props.makeKeyForIndex(key) || uniqueRowKey(key);
+      
+      /**
+       * This is getting hit after we add a new item to the list.
+       * We add more checks to the component will receive props call
+       * We only want the new item added to update the layout, seems like an all or nothing issue.
+       */
       if (prevRowsLayouts) {
+        console.log('USING PREV ROW LAYOUT')
         location.y = nextY;
         nextY += prevRowsLayouts[key] ? prevRowsLayouts[key].height : 0;
       } else if (rowsLayouts) {
+        console.log('GENERATING NEW ROW LAYOUT')
         if (horizontal) {
           location.x = nextX;
           nextX += rowsLayouts[key] ? rowsLayouts[key].width : 0;
@@ -249,20 +266,20 @@ export default class SortableList extends Component {
           location.y = nextY;
           nextY += rowsLayouts[key] ? rowsLayouts[key].height : 0;
         }
+      } else {
+        console.log('OMG NOTHING EXISTS *******************')
       }
 
       const active = activeRowKey === key;
       const released = releasedRowKey === key;
-
+      
       if (active || released) {
         style[ZINDEX] = 100;
       }
-
-      const makeKeyForIndex = this.props.makeKeyForIndex(key) || uniqueRowKey(key);
-
+      
       return (
         <Row
-          key={makeKeyForIndex}
+          key={keyForIndex}
           ref={this._onRefRow.bind(this, key)}
           horizontal={horizontal}
           activationTime={rowActivationTime}
@@ -320,6 +337,7 @@ export default class SortableList extends Component {
     Promise.all([this._headerLayout, this._footerLayout, ...Object.values(this._rowsLayouts)])
       .then(([headerLayout, footerLayout, ...rowsLayouts]) => {
         // Can get correct container’s layout only after rows’s layouts.
+        console.log("----------------- UPDATING LAYOUTS -----------------")
         this._container.measure((x, y, width, height, pageX, pageY) => {
           const rowsLayoutsByKey = {};
           let contentHeight = 0;
