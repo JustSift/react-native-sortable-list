@@ -13,30 +13,150 @@ function uniqueRowKey(key) {
 
 uniqueRowKey.id = 0
 
+/**
+ * SortableList
+ *
+ * Welcome to the `SortableList` component. Here we will attempt to
+ * provide an easy to use and flexible javascript only implemenation
+ * of a common UI component; the draggable, sortable list.
+ *
+ * ## Issues of prior implemenation
+ *
+ * A few notes as to why the previous version of this component
+ * was not working so well.
+ *
+ * - Depends on `onLayout` to resolve an array of promises when
+ *   ever new data or order is set. This creates a few issues when
+ *   trying to reliably resolve ordering elements.
+ *
+ *   NOTE: Using `onLayout` is not inherently a bad idea, just creates
+ *   a few challenges when waiting to resolve layout updates. It is
+ *   actually the best way to support dynamic height rows.
+ *
+ * - Setting a new array for `data` on props would sometimes cause odd
+ *   animation issues as the `rowsLayouts` state was cleared causing
+ *   all rows to reset to (x: 0, y: 0) until all promises for `onLayout`
+ *   were resolved.
+ *
+ * - We attempted to resolve an issue of rows fully unmounting and remounting
+ *   by using a consistent `key` for the component. This caused an issue
+ *   with not all the rows being laid out again so a set of promises would
+ *   never resolve and the layout was not updating.
+ *
+ * ## Constraints
+ *
+ * In order to deal with some of the above issues we are going to sacrafice
+ * a few conviniences in favor of reliability.
+ *
+ * - Row heights must be provided. Dynamic row height will not be supported
+ *   at the moment. The `rowHeight` prop can either be a `number` or `func`.
+ *
+ * ## Design Choices
+ *
+ * UITableView and UICollectionView from UIKit on iOS will have a big influence
+ * on the API of this component as I am unfamiliar with Lists on iOS.
+ */
 export default class SortableList extends Component {
   static propTypes = {
-    data: PropTypes.oneOfType([PropTypes.array, PropTypes.object]).isRequired,
-    order: PropTypes.arrayOf(PropTypes.any),
-    style: ViewPropTypes.style,
-    contentContainerStyle: ViewPropTypes.style,
-    innerContainerStyle: ViewPropTypes.style,
+    /**
+     * The data array that will be used to render rows.
+     *
+     * @note: Possibly change this to `items` to better
+     * indicate this is an array.
+     */
+    data: PropTypes.arrayOf(PropTypes.any).isRequired,
+    /**
+     * The layout info. Pretty basic for now. Just provide
+     * the heights for a row, header and footer. This will
+     * be used to generate an internal layout object.
+     *
+     * {
+     *   row: func | { height: number }
+     *   header: func | { height: number }
+     *   footer: func | { height: number }
+     *   direction: oneOf (horizontal | vertical)
+     * }
+     */
+    layout: PropTypes.object.isRequired,
+    /**
+     * Enable/Disable sorting.
+     */
     sortingEnabled: PropTypes.bool,
+    /**
+     * Not sure why this prop might be needed.
+     */
     scrollEnabled: PropTypes.bool,
+    /**
+     * Default layout direction is Vertical
+     *
+     * @deprecated Use `layout.direction` instead.
+     */
     horizontal: PropTypes.bool,
+    /**
+     * ScrollViewProps to override the inner `ScrollView`.
+     */
+    ScrollViewVprops: PropTypes.object,
+    /**
+     * ScrollView Prop Overrides.
+     *
+     * @deprecated Use ScrollViewProps instead.
+     */
     showsVerticalScrollIndicator: PropTypes.bool,
     showsHorizontalScrollIndicator: PropTypes.bool,
+    /**
+     * Pull to Refresh control.
+     */
     refreshControl: PropTypes.element,
+    /**
+     * The amount of space available on each the left/right
+     * or top/bottom which will begin scrolling the `scrollView`
+     * once the dragging cell enters that area.
+     */
     autoscrollAreaSize: PropTypes.number,
+    /**
+     * The delay until a row being held will enter the 
+     * dragging state.
+     */
     rowActivationTime: PropTypes.number,
+    /**
+     * Not sure what this is. Will investigage.
+     */
     manuallyActivateRows: PropTypes.bool,
-
+    /**
+     * Content to be rendered into a row.
+     * 
+     * A `node` is exptected to be returned from this
+     * function.
+     *
+     * Signature: (key, item, disabled, active, index)
+     */
     renderRow: PropTypes.func.isRequired,
+    /**
+     * Content to be rendered above the first row.
+     *
+     * A `node` is exptected to be returned from this
+     * function.
+     */
     renderHeader: PropTypes.func,
+    /**
+     * Content to be rendered above the first row.
+     *
+     * A `node` is exptected to be returned from this
+     * function.
+     */
     renderFooter: PropTypes.func,
-
+    /**
+     * Actions
+     */
     onChangeOrder: PropTypes.func,
     onActivateRow: PropTypes.func,
     onReleaseRow: PropTypes.func,
+    /**
+     * Style overrides.
+     */ 
+    style: ViewPropTypes.style,
+    contentContainerStyle: ViewPropTypes.style,
+    innerContainerStyle: ViewPropTypes.style,
   };
 
   static defaultProps = {
@@ -54,11 +174,8 @@ export default class SortableList extends Component {
   _rows = {};
 
   /**
-   * Stores promises of rows’ layouts.
+   * Assist with auto scrolling.
    */
-  _rowsLayouts = {};
-  _resolveRowLayout = {};
-
   _contentOffset = {x: 0, y: 0};
 
   state = {
@@ -75,67 +192,44 @@ export default class SortableList extends Component {
   };
 
   componentWillMount() {
-    this.state.order.forEach((key) => {
-      this._rowsLayouts[key] = new Promise((resolve) => {
-        this._resolveRowLayout[key] = resolve;
-      });
-    });
-
-    if (this.props.renderHeader && !this.props.horizontal) {
-      this._headerLayout = new Promise((resolve) => {
-        this._resolveHeaderLayout = resolve;
-      });
-    }
-    if (this.props.renderFooter && !this.props.horizontal) {
-      this._footerLayout = new Promise((resolve) => {
-        this._resolveFooterLayout = resolve;
-      });
-    }
+    
   }
 
   componentDidMount() {
-    this._onUpdateLayouts();
+  
   }
 
   componentWillReceiveProps(nextProps) {
-    const { containerLayout, data, order, rowsLayouts} = this.state;
-    let {data: nextData, order: nextOrder} = nextProps;
+    const { 
+      data, 
+      order, 
+    } = this.state;
 
+    let {
+      data: nextData, 
+    } = nextProps;
+  
     if (data && nextData && !shallowEqual(data, nextData)) {
-      nextOrder = nextOrder || Object.keys(nextData)
-      uniqueRowKey.id++;
-      this._rowsLayouts = {};
-      nextOrder.forEach((key) => {
-        this._rowsLayouts[key] = new Promise((resolve) => {
-          this._resolveRowLayout[key] = resolve;
-        });
-      });
-
-      const isLessOrEqual = nextData.length <= data.length;
-
+      nextOrder = Object.keys(nextData);
+      
       this.setState({
         animated: true,
         data: nextData,
-        containerLayout: isLessOrEqual ? containerLayout : null,
-        rowsLayouts: isLessOrEqual ? rowsLayouts : null,
-        prevRowsLayouts: rowsLayouts,
         order: nextOrder
       });
-
-    } else if (order && nextOrder && !shallowEqual(order, nextOrder)) {
-      this.setState({order: nextOrder});
     }
   }
 
   componentDidUpdate(prevProps, prevState) {
-    const {data} = this.state;
-    const {data: prevData} = prevState;
 
-    if (data && prevData && !shallowEqual(data, prevData)) {
-      this._onUpdateLayouts();
-    }
   }
 
+  /**
+   * Util: Scrolls the internal scrollview by the specified
+   * amount difference.
+   *
+   * @param {Object} See deconstructured object.
+   */
   scrollBy({dx = 0, dy = 0, animated = false}) {
     if (this.props.horizontal) {
       this._contentOffset.x += dx;
@@ -146,6 +240,12 @@ export default class SortableList extends Component {
     this._scroll(animated);
   }
 
+  /**
+   * Util: Scrolls the internal scrollview by the specified
+   * amount.
+   *
+   * @param {Object} See deconstructured object.
+   */
   scrollTo({x = 0, y = 0, animated = false}) {
     if (this.props.horizontal) {
       this._contentOffset.x = x;
@@ -156,6 +256,12 @@ export default class SortableList extends Component {
     this._scroll(animated);
   }
 
+  /**
+   * Not sure what this func does but maybe it is exposed
+   * to be used by a ref? (Maybe I should read the docs).
+   *
+   * @param {Object} See deconstructured object.
+   */
   scrollToRowKey({key, animated = false}) {
     const {order, containerLayout, rowsLayouts} = this.state;
 
@@ -188,15 +294,31 @@ export default class SortableList extends Component {
   }
 
   render() {
-    let {contentContainerStyle, innerContainerStyle, horizontal, style, showsVerticalScrollIndicator, showsHorizontalScrollIndicator} = this.props;
-    const {animated, contentHeight, contentWidth, scrollEnabled} = this.state;
-    const containerStyle = StyleSheet.flatten([style])
+    let {
+      data,
+      layout,
+      contentContainerStyle, 
+      innerContainerStyle, 
+      horizontal, 
+      style, 
+      showsVerticalScrollIndicator, 
+      showsHorizontalScrollIndicator,
+      refreshControl
+    } = this.props;
+
+    const {
+      animated, 
+      scrollEnabled
+    } = this.state;
+
+    const containerStyle = StyleSheet.flatten([style]);
+    const contentSize = data.length * layout.row[(horizontal ? 'width' : 'height')];
+
     innerContainerStyle = [
       styles.rowsContainer,
-      horizontal ? {width: contentWidth} : {height: contentHeight},
+      horizontal ? {width: contentSize} : {height: contentSize},
       innerContainerStyle
     ];
-    let {refreshControl} = this.props;
 
     if (refreshControl && refreshControl.type === RefreshControl) {
       refreshControl = React.cloneElement(this.props.refreshControl, {
@@ -226,10 +348,27 @@ export default class SortableList extends Component {
     );
   }
 
+  /**
+   * Lets render some rows. Currently seperated from the `render` function for
+   * readability. Here we will render our rows based on our array of data. Each
+   * row is assumed to be of the specified height from the `layout` prop.
+   */
   _renderRows() {
-    const {horizontal, rowActivationTime, sortingEnabled, renderRow} = this.props;
-    const {animated, order, data, activeRowKey, releasedRowKey, rowsLayouts, prevRowsLayouts} = this.state;
+    const {
+      layout,
+      horizontal, 
+      rowActivationTime, 
+      sortingEnabled, 
+      renderRow
+    } = this.props;
 
+    const {
+      animated, 
+      order, 
+      data,
+      activeRowKey, 
+      releasedRowKey
+    } = this.state;
 
     let nextX = 0;
     let nextY = 0;
@@ -237,32 +376,26 @@ export default class SortableList extends Component {
     return order.map((key, index) => {
       const style = {[ZINDEX]: 0};
       const location = {x: 0, y: 0};
-
-      if (prevRowsLayouts) {
+      const keyForIndex = this.props.makeKeyForIndex(key) || uniqueRowKey(key);
+      
+      if (horizontal) {
+        location.x = nextX;
+        nextX += layout.row.width;
+      } else {
         location.y = nextY;
-        nextY += prevRowsLayouts[key] ? prevRowsLayouts[key].height : 0;
-      } else if (rowsLayouts) {
-        if (horizontal) {
-          location.x = nextX;
-          nextX += rowsLayouts[key] ? rowsLayouts[key].width : 0;
-        } else {
-          location.y = nextY;
-          nextY += rowsLayouts[key] ? rowsLayouts[key].height : 0;
-        }
+        nextY += layout.row.height;
       }
 
       const active = activeRowKey === key;
       const released = releasedRowKey === key;
-
+      
       if (active || released) {
         style[ZINDEX] = 100;
       }
 
-      const makeKeyForIndex = this.props.makeKeyForIndex(key) || uniqueRowKey(key);
-
       return (
         <Row
-          key={makeKeyForIndex}
+          key={keyForIndex}
           ref={this._onRefRow.bind(this, key)}
           horizontal={horizontal}
           activationTime={rowActivationTime}
@@ -270,7 +403,6 @@ export default class SortableList extends Component {
           disabled={!sortingEnabled}
           style={style}
           location={location}
-          onLayout={!rowsLayouts ? this._onLayoutRow.bind(this, key) : null}
           onActivate={this._onActivateRow.bind(this, key, index)}
           onPress={this._onPressRow.bind(this, key)}
           onRelease={this._onReleaseRow.bind(this, key)}
@@ -293,10 +425,12 @@ export default class SortableList extends Component {
       return null;
     }
 
+    console.warn('Rendering Header in SortableList is currently not finished');
+
     const {headerLayout} = this.state;
 
     return (
-      <View onLayout={!headerLayout ? this._onLayoutHeader : null}>
+      <View>
         {this.props.renderHeader()}
       </View>
     );
@@ -306,43 +440,16 @@ export default class SortableList extends Component {
     if (!this.props.renderFooter || this.props.horizontal) {
       return null;
     }
+    
+    console.warn('Rendering Header in SortableList is currently not finished');
 
     const {footerLayout} = this.state;
 
     return (
-      <View onLayout={!footerLayout ? this._onLayoutFooter : null}>
+      <View>
         {this.props.renderFooter()}
       </View>
     );
-  }
-
-  _onUpdateLayouts() {
-    Promise.all([this._headerLayout, this._footerLayout, ...Object.values(this._rowsLayouts)])
-      .then(([headerLayout, footerLayout, ...rowsLayouts]) => {
-        // Can get correct container’s layout only after rows’s layouts.
-        this._container.measure((x, y, width, height, pageX, pageY) => {
-          const rowsLayoutsByKey = {};
-          let contentHeight = 0;
-          let contentWidth = 0;
-
-          rowsLayouts.forEach(({rowKey, layout}) => {
-            rowsLayoutsByKey[rowKey] = layout;
-            contentHeight += layout.height;
-            contentWidth += layout.width;
-          });
-
-          this.setState({
-            containerLayout: {x, y, width, height, pageX, pageY},
-            rowsLayouts: rowsLayoutsByKey,
-            headerLayout,
-            footerLayout,
-            contentHeight,
-            contentWidth,
-          }, () => {
-            this.setState({animated: true});
-          });
-        });
-      });
   }
 
   _scroll(animated) {
