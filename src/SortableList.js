@@ -174,6 +174,11 @@ export default class SortableList extends Component {
   _rows = {};
 
   /**
+   * Stores results of `onLayout`
+   */
+  _rowsLayouts = {}
+
+  /**
    * Assist with auto scrolling.
    */
   _contentOffset = {x: 0, y: 0};
@@ -181,7 +186,7 @@ export default class SortableList extends Component {
   state = {
     animated: false,
     order: this.props.order || Object.keys(this.props.data),
-    rowsLayouts: null,
+    rowsLayout: null,
     containerLayout: null,
     data: this.props.data,
     activeRowKey: null,
@@ -196,7 +201,6 @@ export default class SortableList extends Component {
   }
 
   componentDidMount() {
-  
   }
 
   componentWillReceiveProps(nextProps) {
@@ -221,7 +225,12 @@ export default class SortableList extends Component {
   }
 
   componentDidUpdate(prevProps, prevState) {
+    const {data} = this.state;
+    const {data: prevData} = prevState;
 
+    if (data && prevData && !shallowEqual(data, prevData)) {
+			this._makeLayout();
+    }
   }
 
   /**
@@ -327,7 +336,7 @@ export default class SortableList extends Component {
     }
 
     return (
-      <View style={containerStyle} ref={this._onRefContainer}>
+      <View style={containerStyle} ref={this._onRefContainer} onLayout={this._makeLayout}>
         <ScrollView
           refreshControl={refreshControl}
           ref={this._onRefScrollView}
@@ -377,13 +386,19 @@ export default class SortableList extends Component {
       const style = {[ZINDEX]: 0};
       const location = {x: 0, y: 0};
       const keyForIndex = this.props.makeKeyForIndex(key) || uniqueRowKey(key);
+
+      let rowLayout = this._rowsLayouts[key] || {};
+      if (!rowLayout) {
+        rowLayout.width = layout.row.width;
+        rowLayout.height = layout.row.height;
+      }
       
       if (horizontal) {
         location.x = nextX;
-        nextX += layout.row.width;
+        nextX += rowLayout.width
       } else {
         location.y = nextY;
-        nextY += layout.row.height;
+        nextY += rowLayout.height;
       }
 
       const active = activeRowKey === key;
@@ -403,6 +418,7 @@ export default class SortableList extends Component {
           disabled={!sortingEnabled}
           style={style}
           location={location}
+          onLayout={this._onLayoutRow.bind(this, key)}
           onActivate={this._onActivateRow.bind(this, key, index)}
           onPress={this._onPressRow.bind(this, key)}
           onRelease={this._onReleaseRow.bind(this, key)}
@@ -450,6 +466,37 @@ export default class SortableList extends Component {
         {this.props.renderFooter()}
       </View>
     );
+  }
+
+  /**
+   *
+   */
+  _layoutForRow(index) {
+    
+  }
+
+  /**
+   *
+   */
+  _makeLayout = () => {
+    const {
+      data,
+      layout,
+      horizontal
+    } = this.props;
+
+    this._container.measure((x, y, width, height, pageX, pageY) => {
+      let contentHeight = horizontal ? height : data.length * layout.row.height;
+      let contentWidth =  horizontal ? data.length * layout.row.width : width
+
+      this.setState({
+        containerLayout: {x, y, width, height, pageX, pageY},
+        contentHeight,
+        contentWidth,
+      }, () => {
+        this.setState({animated: true});
+      });
+    });
   }
 
   _scroll(animated) {
@@ -502,8 +549,10 @@ export default class SortableList extends Component {
    * Finds a row, which was covered with the moving row’s half.
    */
   _findRowUnderActiveRow() {
+    const rowsLayouts = this._rowsLayouts;
+
     const {horizontal} = this.props;
-    const {rowsLayouts, activeRowKey, activeRowIndex, order} = this.state;
+    const {activeRowKey, activeRowIndex, order} = this.state;
     const movingRowLayout = rowsLayouts[activeRowKey];
     const rowLeftX = this._activeRowLocation.x
     const rowRightX = rowLeftX + movingRowLayout.width;
@@ -661,7 +710,7 @@ export default class SortableList extends Component {
   }
 
   _onLayoutRow(rowKey, {nativeEvent: {layout}}) {
-    this._resolveRowLayout[rowKey]({rowKey, layout});
+    this._rowsLayouts[rowKey] = layout;
   }
 
   _onLayoutHeader = ({nativeEvent: {layout}}) => {
