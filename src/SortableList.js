@@ -500,11 +500,6 @@ export default class SortableList extends Component {
         width:  0,
       });
 
-      console.log('---- Measured ----');
-      console.log(`---- Content: Height ${contentSize.height} Width ${contentSize.width} ----`);
-      console.log(`---- Container: Height ${height} Width ${width} ----`);
-      console.log('------------------');
-
       this.setState({
         containerLayout: {x, y, width, height, pageX, pageY},
         contentHeight: contentSize.height,
