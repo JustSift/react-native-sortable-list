@@ -317,15 +317,16 @@ export default class SortableList extends Component {
 
     const {
       animated, 
-      scrollEnabled
+      scrollEnabled,
+      contentHeight,
+      contentWidth
     } = this.state;
 
     const containerStyle = StyleSheet.flatten([style]);
-    const contentSize = data.length * layout.row[(horizontal ? 'width' : 'height')];
 
     innerContainerStyle = [
       styles.rowsContainer,
-      horizontal ? {width: contentSize} : {height: contentSize},
+      horizontal ? {width: contentWidth} : {height: contentHeight},
       innerContainerStyle
     ];
 
@@ -486,13 +487,28 @@ export default class SortableList extends Component {
     } = this.props;
 
     this._container.measure((x, y, width, height, pageX, pageY) => {
-      let contentHeight = horizontal ? height : data.length * layout.row.height;
-      let contentWidth =  horizontal ? data.length * layout.row.width : width
+      // Items
+      let contentSize = data.reduce( (acc, item, index) => {
+        const rowLayout = this._rowsLayouts[index];
+
+        return {
+          height: horizontal ? acc.height : (rowLayout ? rowLayout.height : layout.row.height) + acc.height,
+          width: horizontal ? (rowLayout ? rowLayout.width : layout.row.width) + acc.width : acc.width
+        }
+      }, {
+        height: 0,
+        width:  0,
+      });
+
+      console.log('---- Measured ----');
+      console.log(`---- Content: Height ${contentSize.height} Width ${contentSize.width} ----`);
+      console.log(`---- Container: Height ${height} Width ${width} ----`);
+      console.log('------------------');
 
       this.setState({
         containerLayout: {x, y, width, height, pageX, pageY},
-        contentHeight,
-        contentWidth,
+        contentHeight: contentSize.height,
+        contentWidth: contentSize.width,
       }, () => {
         this.setState({animated: true});
       });
